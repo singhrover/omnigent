@@ -32,11 +32,12 @@ holds its workspace and host-local Omnigent credentials.
    This is the durable artifact backend; omitting it makes uploads ephemeral.
 3. Create a scoped DigitalOcean API token for the server. It needs read/write
    access for Droplets, Block Storage and volume actions. In the custom-scope
-   picker, grant `droplet:create/read/update/delete`,
+   picker, grant `droplet:create/read/delete`, `droplet_action:create`,
    `block_storage:create/read/delete`, `block_storage_action:create/read`, and
-   `tag:create/read`, plus the prerequisite read scopes DigitalOcean lists for
-   actions, regions, sizes, images, snapshots, and VPCs. Do not reuse a
-   personal full-access token when a custom-scoped token is available.
+   `tag:create/read`. Also grant the prerequisite `actions:read`,
+   `regions:read`, `sizes:read`, `image:read`, `snapshot:read`, and `vpc:read`
+   scopes. Do not reuse a personal full-access token when a custom-scoped token
+   is available.
 4. Edit [`.do/app.yaml`](../../.do/app.yaml) before importing it and replace the
    Spaces bucket. The GitHub source is this fork and `OMNIGENT_PUBLIC_URL` uses
    App Platform's `${APP_URL}` binding. The `db` component and its
