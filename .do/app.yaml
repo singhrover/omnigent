@@ -1,5 +1,10 @@
 name: omnigent
 region: sgp
+databases:
+  - name: db
+    engine: PG
+    version: "18"
+    production: false
 services:
   - name: server
     github:
@@ -68,8 +73,9 @@ services:
         scope: RUN_TIME
         type: GENERAL
       - key: DATABASE_URL
+        value: ${db.DATABASE_URL}
         scope: RUN_TIME
-        type: SECRET
+        type: GENERAL
       - key: DIGITALOCEAN_TOKEN
         scope: RUN_TIME
         type: SECRET

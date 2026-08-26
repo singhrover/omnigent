@@ -9,7 +9,7 @@ GitHub fork (main, deploy_on_push)
         ↓
 DigitalOcean App Platform (SGP)
         ├── Omnigent server
-        ├── Managed PostgreSQL
+        ├── App Platform dev PostgreSQL
         └── Spaces (durable artifacts)
                  ↓ DigitalOcean API
         ephemeral Droplet + persistent Volume (sgp1)
@@ -19,36 +19,37 @@ DigitalOcean App Platform (SGP)
 
 The App Platform filesystem is deliberately treated as ephemeral. The startup
 wrapper generates `/tmp/.../config.yaml` from environment variables on every
-boot. PostgreSQL holds application state, Spaces holds uploaded artifacts, and
-each managed host's Block Storage volume holds its workspace and host-local
-Omnigent credentials.
+boot. The App Spec creates a dev PostgreSQL database and binds its generated
+connection string to `DATABASE_URL`. PostgreSQL holds application state,
+Spaces holds uploaded artifacts, and each managed host's Block Storage volume
+holds its workspace and host-local Omnigent credentials.
 
 ## One-time setup
 
 1. Fork `omnigent-ai/omnigent` on GitHub and keep the deployment branch named
    `main`.
-2. In DigitalOcean, create a production Managed PostgreSQL cluster in
-   Singapore. Copy its TLS connection string for `DATABASE_URL`.
-3. Create a private Spaces bucket in `sgp1` and a restricted Spaces access key.
+2. Create a private Spaces bucket in `sgp1` and a restricted Spaces access key.
    This is the durable artifact backend; omitting it makes uploads ephemeral.
-4. Create a scoped DigitalOcean API token for the server. It needs read/write
+3. Create a scoped DigitalOcean API token for the server. It needs read/write
    access for Droplets, Block Storage and volume actions. In the custom-scope
    picker, grant `droplet:create/read/update/delete`,
    `block_storage:create/read/delete`, `block_storage_action:create/read`, and
    `tag:create/read`, plus the prerequisite read scopes DigitalOcean lists for
    actions, regions, sizes, images, snapshots, and VPCs. Do not reuse a
    personal full-access token when a custom-scoped token is available.
-5. Edit [`.do/app.yaml`](../../.do/app.yaml) before importing it and replace the
+4. Edit [`.do/app.yaml`](../../.do/app.yaml) before importing it and replace the
    Spaces bucket. The GitHub source is this fork and `OMNIGENT_PUBLIC_URL` uses
-   App Platform's `${APP_URL}` binding. Secret declarations intentionally have
-   no values; enter them in DigitalOcean, never in the committed file.
-6. In **Apps → Create App**, connect GitHub, select this fork and `main`, and
+   App Platform's `${APP_URL}` binding. The `db` component and its
+   `${db.DATABASE_URL}` binding are created automatically. Secret declarations
+   intentionally have no values; enter them in DigitalOcean, never in the
+   committed file.
+5. In **Apps → Create App**, connect GitHub, select this fork and `main`, and
    grant DigitalOcean repository access. Import `.do/app.yaml` or reproduce its
    settings in the control panel. Fill each encrypted secret variable before
    the first successful start, and confirm **Autodeploy** is enabled.
-7. Keep the App Platform region as `sgp`. Keep PostgreSQL, Spaces, Droplets and
+6. Keep the App Platform region as `sgp`. Keep PostgreSQL, Spaces, Droplets and
    volumes in Singapore (`sgp1`) for the lowest practical latency from Bangkok.
-8. Deploy once, open the App URL, and create the initial accounts-mode admin
+7. Deploy once, open the App URL, and create the initial accounts-mode admin
    using `OMNIGENT_ACCOUNTS_INIT_ADMIN_PASSWORD`. Rotate or remove that bootstrap
    password after the first admin exists.
 
@@ -65,7 +66,7 @@ not perform deployment.
 
 | Variable | Secret | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | yes | Managed PostgreSQL TLS connection string |
+| `DATABASE_URL` | no | Automatically bound to `${db.DATABASE_URL}` by App Platform |
 | `DIGITALOCEAN_TOKEN` | yes | Server-only Droplet/Volume lifecycle token |
 | `OMNIGENT_PUBLIC_URL` | no | Exact public `https://...ondigitalocean.app` URL |
 | `OMNIGENT_AUTH_PROVIDER=accounts` | no | Keeps the public server authenticated |
@@ -78,9 +79,37 @@ not perform deployment.
 | `OMNIGENT_FEATURES=harness_install` | no | Enables secure host credential setup in the UI |
 
 Generate the cookie secret as at least 32 random bytes encoded as hex, for
-example `python -c 'import secrets; print(secrets.token_hex(32))'`. Use the TLS
-PostgreSQL connection string DigitalOcean provides; do not remove its SSL
-settings.
+example `python -c 'import secrets; print(secrets.token_hex(32))'`.
+
+The declared database is an App Platform dev database intended for initial
+testing, not production. App Platform creates it during app creation and
+supplies its credentials through the bindable `DATABASE_URL`; do not add a
+separate database secret. Before production use, convert it to a managed
+database or provision a managed PostgreSQL cluster and update the App Spec to
+attach that cluster.
+
+## GitHub and DigitalOcean secrets
+
+GitHub Actions does not deploy or authenticate to DigitalOcean, so do not put
+`DIGITALOCEAN_TOKEN`, database credentials, Spaces credentials, or Omnigent
+application secrets in GitHub. The only optional GitHub Actions secret is
+`UPSTREAM_SYNC_TOKEN`, which lets the scheduled upstream-sync PR trigger CI
+without the restrictions of the repository's default `GITHUB_TOKEN`.
+
+Enter these values in the DigitalOcean App Platform environment editor when
+importing the App Spec:
+
+| DigitalOcean secret | Where to obtain it |
+| --- | --- |
+| `DIGITALOCEAN_TOKEN` | A custom-scoped DigitalOcean API token for managed Droplet, volume, tag, and prerequisite read operations |
+| `OMNIGENT_ACCOUNTS_COOKIE_SECRET` | Generate locally with `python -c 'import secrets; print(secrets.token_hex(32))'` |
+| `OMNIGENT_ACCOUNTS_INIT_ADMIN_PASSWORD` | Choose a unique initial admin password, then rotate or remove it after bootstrap |
+| `AWS_ACCESS_KEY_ID` | The access key for a restricted `sgp1` Spaces key |
+| `AWS_SECRET_ACCESS_KEY` | The corresponding Spaces secret key |
+
+DigitalOcean receives repository access through its GitHub App connection; no
+GitHub personal access token is pasted into App Platform. `DATABASE_URL` and
+`OMNIGENT_PUBLIC_URL` are platform bindings and require no user-provided secret.
 
 The App Spec also sets these configurable host defaults:
 
@@ -148,7 +177,7 @@ owned volume, then removes the host row. Deleting a managed session already
 uses this permanent teardown path. A volume with missing/mismatched ownership
 tags, name, region, or filesystem is refused rather than guessed at.
 
-While suspended, the coding Droplet is gone. App Platform, Managed PostgreSQL,
+While suspended, the coding Droplet is gone. App Platform, dev PostgreSQL,
 Spaces, and the Block Storage volume continue to incur their normal charges.
 
 ## Model and Git credentials

@@ -64,9 +64,18 @@ jobs:
           spec = yaml.safe_load(Path('.do/app.yaml').read_text())
           service = spec['services'][0]
           assert spec['region'] == 'sgp'
+          assert spec['databases'] == [{
+              'name': 'db',
+              'engine': 'PG',
+              'version': '18',
+              'production': False,
+          }]
           assert service['github']['deploy_on_push'] is True
           assert service['http_port'] == 8000
           assert service['health_check']['http_path'] == '/health'
+          envs = {env['key']: env for env in service['envs']}
+          assert envs['DATABASE_URL']['value'] == '${db.DATABASE_URL}'
+          assert envs['DATABASE_URL']['type'] == 'GENERAL'
           PY
 
       - name: Run DigitalOcean provider tests
